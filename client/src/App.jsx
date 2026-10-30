@@ -1,11 +1,67 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
 import ApplianceForm from './components/ApplianceForm.jsx';
 import ApplianceTable from './components/ApplianceTable.jsx';
 import TariffForm from './components/TariffForm.jsx';
+import AuthPage from './components/AuthPage.jsx';
 import { calculateTotals, dailyEnergy, monthlyEnergy, money } from './utils/energy.js';
 
 export default function App() {
+  const [user, setUser] = useState(null);
+  const [checking, setChecking] = useState(true);
+  const [sessionError, setSessionError] = useState('');
+  const [loggingOut, setLoggingOut] = useState(false);
+  const checkVersion = useRef(0);
+
+  useEffect(() => {
+    let active = true;
+    async function checkSession() {
+      const version = ++checkVersion.current;
+      try {
+        const result = await api('/auth/me');
+        if (active && version === checkVersion.current) { setUser(result.user); setSessionError(''); }
+      } catch (error) {
+        if (active && version === checkVersion.current) {
+          if (error.status === 401) { setUser(null); setSessionError(''); }
+          else setSessionError(error.message);
+        }
+      } finally { if (active) setChecking(false); }
+    }
+    function sessionExpired() {
+      checkVersion.current += 1;
+      setUser(null); setSessionError('Your session ended. Please log in again.');
+    }
+    checkSession();
+    window.addEventListener('focus', checkSession);
+    window.addEventListener('energy:session-expired', sessionExpired);
+    return () => {
+      active = false;
+      window.removeEventListener('focus', checkSession);
+      window.removeEventListener('energy:session-expired', sessionExpired);
+    };
+  }, []);
+
+  function authenticated(account) {
+    checkVersion.current += 1;
+    setSessionError(''); setUser(account);
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+  async function logout() {
+    setLoggingOut(true); setSessionError('');
+    try {
+      await api('/auth/logout', 'POST');
+      checkVersion.current += 1; setUser(null);
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    } catch (error) { setSessionError(error.message); }
+    finally { setLoggingOut(false); }
+  }
+
+  if (checking) return <div className="auth-loading" role="status"><span className="brand-mark">EE</span><p>Opening your energy workspace...</p></div>;
+  if (!user) return <AuthPage onAuthenticated={authenticated} serviceError={sessionError} />;
+  return <Dashboard key={user._id} user={user} onLogout={logout} loggingOut={loggingOut} sessionError={sessionError} />;
+}
+
+function Dashboard({ user, onLogout, loggingOut, sessionError }) {
   const [appliances, setAppliances] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [settings, setSettings] = useState({ unitRate: 30, fixedCharge: 0 });
@@ -85,14 +141,17 @@ export default function App() {
         <div className="header-inner">
           <a className="brand" href="#dashboard"><span className="brand-mark">EE</span>Energy Estimator</a>
           <nav aria-label="Main navigation"><a href="#dashboard">Dashboard</a><a href="#appliances">Appliances</a><a href="#tariff">Tariff</a></nav>
+          <div className="account-menu"><span title={user.email}>{user.fullName}</span><button type="button" className="secondary small" onClick={onLogout} disabled={loggingOut}>{loggingOut ? 'Logging out...' : 'Log out'}</button></div>
         </div>
       </header>
       <main>
         <section className="intro" id="dashboard">
-          <p className="eyebrow">HOUSEHOLD ENERGY PLANNING</p>
+          <p className="eyebrow">WELCOME, {user.fullName}</p>
           <h1>Electrical Energy Consumption<br className="desktop-break" /> and Cost Estimation System</h1>
           <p>Keep track of your appliances, estimate their energy use and plan your monthly cost.</p>
+          <p className="account-context">{[user.householdName || 'Your personal energy workspace', user.city, user.householdSize ? `${user.householdSize} household members` : ''].filter(Boolean).join(' · ')}</p>
         </section>
+        {sessionError && <div className="notice error" role="alert">{sessionError}</div>}
         {error && <div className="notice error" role="alert">{error}</div>}
         {message && <div className="notice success" role="status">{message}</div>}
         {!loaded ? <section className="panel"><p>{busy ? 'Loading your saved records...' : 'The application could not load.'}</p><button disabled={busy} onClick={loadData}>Retry connection</button></section> : (
@@ -135,7 +194,7 @@ export default function App() {
           </>
         )}
       </main>
-      <footer>MERN mini project · Estimates based on user-entered appliance data</footer>
+      <footer>Electrical Energy System Project · Estimates based on your appliance data</footer>
     </>
   );
 }

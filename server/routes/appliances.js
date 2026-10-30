@@ -34,25 +34,25 @@ router.param('id', (req, res, next, id) => {
 });
 
 router.get('/', async (req, res) => {
-  const appliances = await Appliance.find().populate('roomId', 'name').sort({ createdAt: -1 });
+  const appliances = await Appliance.find({ userId: req.user._id }).populate('roomId', 'name').sort({ createdAt: -1 });
   res.json(appliances);
 });
 
 router.get('/:id', async (req, res) => {
-  const appliance = await Appliance.findById(req.params.id).populate('roomId', 'name');
+  const appliance = await Appliance.findOne({ _id: req.params.id, userId: req.user._id }).populate('roomId', 'name');
   if (!appliance) return res.status(404).json({ message: 'Appliance not found.' });
   res.json(appliance);
 });
 
 router.post('/', async (req, res) => {
   const input = await getInput(req.body);
-  const appliance = await Appliance.create(input);
+  const appliance = await Appliance.create({ ...input, userId: req.user._id });
   await appliance.populate('roomId', 'name');
   res.status(201).json(appliance);
 });
 
 router.put('/:id', async (req, res) => {
-  const appliance = await Appliance.findById(req.params.id);
+  const appliance = await Appliance.findOne({ _id: req.params.id, userId: req.user._id });
   if (!appliance) return res.status(404).json({ message: 'Appliance not found.' });
   Object.assign(appliance, await getInput(req.body));
   await appliance.save(); // Runs all schema validators on updates too.
@@ -61,7 +61,7 @@ router.put('/:id', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
-  const appliance = await Appliance.findByIdAndDelete(req.params.id);
+  const appliance = await Appliance.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
   if (!appliance) return res.status(404).json({ message: 'Appliance not found.' });
   res.json({ message: 'Appliance deleted.' });
 });

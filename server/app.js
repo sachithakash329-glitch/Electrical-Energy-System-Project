@@ -3,9 +3,17 @@ import mongoose from 'mongoose';
 import appliances from './routes/appliances.js';
 import settings from './routes/settings.js';
 import Room from './models/Room.js';
+import auth from './routes/auth.js';
+import { requireUser } from './auth/session.js';
+import { protectWrites } from './auth/requestSecurity.js';
 
 const app = express();
 app.disable('x-powered-by');
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('X-Content-Type-Options', 'nosniff');
+  next();
+});
 app.use(express.json({ limit: '10kb' }));
 
 app.get('/api/health', (req, res) => {
@@ -20,9 +28,11 @@ app.use('/api', (req, res, next) => {
   }
   next();
 });
-app.get('/api/rooms', async (req, res) => res.json(await Room.find().sort({ name: 1 })));
-app.use('/api/appliances', appliances);
-app.use('/api/settings', settings);
+app.use('/api', protectWrites);
+app.use('/api/auth', auth);
+app.get('/api/rooms', requireUser, async (req, res) => res.json(await Room.find().sort({ name: 1 })));
+app.use('/api/appliances', requireUser, appliances);
+app.use('/api/settings', requireUser, settings);
 app.use((req, res) => res.status(404).json({ message: 'API route not found.' }));
 
 // Express 5 sends rejected async route promises to this error handler.

@@ -6,6 +6,7 @@ import Setting from '../models/Setting.js';
 
 // These tests validate documents without needing database credentials.
 const valid = {
+  userId: new mongoose.Types.ObjectId(),
   name: 'Ceiling fan', roomId: new mongoose.Types.ObjectId(),
   powerWatts: 75, quantity: 2, hoursPerDay: 8, daysPerMonth: 30
 };
@@ -39,7 +40,14 @@ test('zero hours and decimal daily hours are valid', async () => {
 });
 
 test('tariff values must be nonnegative', async () => {
-  await new Setting({ unitRate: 30, fixedCharge: 100 }).validate();
-  await assert.rejects(new Setting({ unitRate: -1, fixedCharge: 100 }).validate());
-  await assert.rejects(new Setting({ unitRate: 30, fixedCharge: -1 }).validate());
+  const owner = new mongoose.Types.ObjectId();
+  const identity = { _id: owner.toString(), userId: owner };
+  await new Setting({ ...identity, unitRate: 30, fixedCharge: 100 }).validate();
+  await assert.rejects(new Setting({ ...identity, unitRate: -1, fixedCharge: 100 }).validate());
+  await assert.rejects(new Setting({ ...identity, unitRate: 30, fixedCharge: -1 }).validate());
+});
+
+test('new appliance and tariff records require an account owner', async () => {
+  await assert.rejects(new Appliance({ ...valid, userId: undefined }).validate());
+  await assert.rejects(new Setting({ _id: 'missing-owner', unitRate: 30, fixedCharge: 0 }).validate());
 });

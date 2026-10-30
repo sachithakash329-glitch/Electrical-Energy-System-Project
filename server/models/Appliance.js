@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 const applianceSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   name: {
     type: String, required: true, trim: true, minlength: 2, maxlength: 60
   },
@@ -18,6 +19,8 @@ const applianceSchema = new mongoose.Schema({
     validate: { validator: Number.isInteger, message: 'Days must be a whole number.' }
   }
 }, { timestamps: true });
+
+applianceSchema.index({ userId: 1, createdAt: -1 });
 
 // Energy is calculated from these inputs, so it cannot become stale after an edit.
 export default mongoose.model('Appliance', applianceSchema);
